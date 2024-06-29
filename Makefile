@@ -3,11 +3,11 @@ CC = gcc
 CFLAGS = -Wall -O2
 
 # Define the source and object files
-SRC = fft.c dht.c
+SRC = fft.c seq-dht.c
 OBJS = $(SRC:.c=.o)
 
 # Default target
-all: fft dht
+all: fft seq-dht
 
 # Rule to build the target executable
 $@: $(OBJS)
