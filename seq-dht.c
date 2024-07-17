@@ -11,6 +11,7 @@ int print_output(FILE *outputfp, char *filename, int n, float *output);
 void dht(int n, float *input, int norm, float *output);
 void init(float *arr, int n);
 
+
 /* Main function */
 int main(int argc, char **argv){
     FILE *inputfp = NULL;   // Input file pointer
@@ -46,6 +47,7 @@ int main(int argc, char **argv){
     float* output = (float *)malloc(n * sizeof(float));
     init(output, n);
 
+    // start the clock
     clock_t t = clock();
 
     // call the dht function
