@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include<time.h>
+#include <time.h>
 
 #define PI 3.14159265358979323846
 
@@ -21,7 +21,7 @@ int main(int argc, char **argv){
 
     // Check if the input file is provided
     if (argc < 2 || argc > 4){
-        printf("\nUsage: %s <input filename> <output filename> [norm]", argv[0]);
+        printf("\nUsage: %s ./input/<input filename> ./output/<output filename> [norm]", argv[0]);
         return 1;
     }
 
