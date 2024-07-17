@@ -61,7 +61,7 @@ int main(int argc, char **argv){
 /* Function definitions */
 
 
-/* Read the input from the file
+/** Read the input from the file
     * @param inputfp: file pointer
     * @param filename: name of the file
     * @param n: size of the input array
@@ -98,7 +98,7 @@ int take_input(FILE *inputfp, char *filename, int *n, double **input){
 }
 
 
-/* Function to transform the input array into the tau level
+/** Function to transform the input array into the tau level
     * @param input: input array
     * @param n: number of input points
     * @return void
@@ -131,7 +131,7 @@ void transform_array(double *input, int n) {
 }
 
 
-/* Function to evaluate all the f(tau) levels
+/** Function to evaluate all the f(tau) levels
     * @param input: input array
     * @param n: size of the input array
     * @return void
@@ -173,7 +173,7 @@ void evaluateLevels(double *input, int n){
 }
 
 
-/* Function to calculate cos((2 * PI * n) / pow(2, l)) 
+/** Function to calculate cos((2 * PI * n) / pow(2, l)) 
     * @param n: index
     * @param l: level
     * @return cos value
@@ -183,7 +183,7 @@ double cosN(int n, int l){
 }
 
 
-/* Function to calculate sin((2 * PI * n) / pow(2, l)) 
+/** Function to calculate sin((2 * PI * n) / pow(2, l)) 
     * @param n: index
     * @param l: level
     * @return sin value
@@ -193,7 +193,7 @@ double sinN(int n, int l){
 }
 
 
-/* Function to evaluate H(v)
+/** Function to evaluate H(v)
     * @param input: input array
     * @param n: size of the input array
     * @return void
@@ -205,7 +205,7 @@ void evaluateHv(double *input, int n){
 }
 
 
-/* Write the output to the file
+/** Write the output to the file
     * @param inputfp: file pointer
     * @param filename: name of the file
     * @param n: size of the output array
