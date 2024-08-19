@@ -24,7 +24,7 @@ def transform_array(data):
     
     return temp
 
-data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+data = [1, 2, 3, 4, 5, 6, 7, 8]
 print(f"Data: \t{np.round(data, 2)}")
 
 N = len(data)
@@ -51,6 +51,9 @@ for s in range(logN):
     for k in range(0, N, 2 * m):
 
         for j in range(m):
+            t_d = k+j
+            u1_d = k+j+m
+            u2_d = u+k
             t = data[k + j]
             u1 = data[k + j + m]
             u2 = data[u+k]
