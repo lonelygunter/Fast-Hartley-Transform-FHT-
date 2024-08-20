@@ -39,8 +39,6 @@ int main(int argc, char **argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    printf("\nrank: %d", rank);
-
     if (!rank) {
         if (take_input(inputfp, argv[1], &n, &input)){
             MPI_Abort(MPI_COMM_WORLD, 1);
@@ -48,11 +46,11 @@ int main(int argc, char **argv) {
         }
 
         // print the input array
-        printf("\n%d; ar: ", rank);
-        for (int i = 0; i < n; i++) {
-            printf("%.2f\t", input[i]);
-        }
-        printf("\n");
+        // printf("\n%d; ar: ", rank);
+        // for (int i = 0; i < n; i++) {
+        //     printf("%.2f\t", input[i]);
+        // }
+        // printf("\n");
 
         fflush(stdout);
     }
@@ -78,7 +76,7 @@ int main(int argc, char **argv) {
     // Aggregate the data from the root process
     int ebp = 0;
     ebp = eval_ebp(n, size, 1);
-    printf("\nebp: %d", ebp);
+    printf("\nrank: %d - ebp: %d", rank, ebp);
 
     if (!rank) {
         // create level 0: f_0 (tau)
@@ -100,7 +98,7 @@ int main(int argc, char **argv) {
         MPI_Recv(input, ebp, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
 
-    // MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
 
     // print level 0
     printf("\n%d; f0:\t", rank);
@@ -110,7 +108,7 @@ int main(int argc, char **argv) {
 
     // create other levels
     eval_levels(input, n, rank, size);
-    
+
     // aggregate the data for H(v)
 
 
@@ -132,8 +130,6 @@ int main(int argc, char **argv) {
 
     if (rank == 0){
         printf("\nSequential time: %f", time);
-
-        printf("\n----3-------");
     }
 
     MPI_Finalize();
@@ -143,8 +139,6 @@ int main(int argc, char **argv) {
         if (print_output(outputfp, argv[2], n, input)){
             return 1;
         }
-
-        printf("\n----4-------");
     }
 
     free(input);
@@ -238,14 +232,14 @@ int eval_ebp(int n, int p, int level){
 
     p_ideal = n / pow(2, level);
 
-    printf("\np: %d", p);
-    printf("\np_ideal: %d = %d / 2^%d", p_ideal, n, level);
+    // printf("\np: %d", p);
+    // printf("\np_ideal: %d = %d / 2^%d", p_ideal, n, level);
 
     if (!(p <= p_ideal)){
         return 1;
     }
 
-    printf("\nebp = (%d/%d) * 2^%d", p_ideal, p, level);
+    // printf("\nebp = (%d/%d) * 2^%d", p_ideal, p, level);
 
     return (p_ideal/p) * pow(2, level);
 }
@@ -258,10 +252,12 @@ int eval_ebp(int n, int p, int level){
     * @return 0 if the data is aggregated successfully, 1 otherwise
 */
 int aggregate_data(double *input, int p, int rank, int ebp){
-    for (int i = 0; i < p; i += ebp){
+    for (int i = 1; i < p; i++){
 
-        for (int j = 1; j < ebp; j++){
-            if (MPI_Send(&input[i+j-1+ebp], ebp, MPI_DOUBLE, j, 0, MPI_COMM_WORLD) != MPI_SUCCESS){
+        for (int j = 0; j < ebp; j++){
+            // printf("\nMPI_Send: %f to %d", input[(ebp*i)+j], i);
+            
+            if (MPI_Send(&input[(ebp*i)+j], ebp, MPI_DOUBLE, i, 0, MPI_COMM_WORLD) != MPI_SUCCESS){
                 return 1;
             }
         }
@@ -279,20 +275,19 @@ int aggregate_data(double *input, int p, int rank, int ebp){
     * @return void
 */
 void eval_levels(double *input, int n, int rank, int size){
-    double *temp = (double*)malloc(n * sizeof(double));
+    double *temp = NULL;
     int logN = (int)log2(n);
 
-    for (int s = 0; s < logN; s++){
-        int m = pow(2, s);
+    // iterate through all levels
+    for (int l = 0; l < logN; l++){
+        int m = pow(2, l);
         int u = m;
         int j = rank % m;
+        int its = pow(2, l+1);  // items to send
+        int rop = n / (its*2);      // range of processes
 
-        printf("\n%d; ev: ", rank);
-        for (int i = 0; i < n; i++) {
-            printf("%.2f\t", input[i]);
-        }
-
-        // Parallelize this loop
+        temp = (double*)malloc(its * sizeof(double));
+        // printf("\n%d; f%d -> its: %d  rop: %d", rank, l+1, its, rop);
 
         if (j + m < n) {
             double t  = input[j];        // first element
@@ -300,75 +295,38 @@ void eval_levels(double *input, int n, int rank, int size){
             double u2 = input[u];        // third element
 
             // butterfly operations
-            temp[j] = t + (u1 * cosN(j, s+1)) + (u2 * sinN(j, s+1));
-            temp[j + m] = t + (u1 * cosN(j+m, s+1)) + (u2 * sinN(j+m, s+1));
+            temp[j] = t + (u1 * cosN(j, l+1)) + (u2 * sinN(j, l+1));
+            temp[j + m] = t + (u1 * cosN(j+m, l+1)) + (u2 * sinN(j+m, l+1));
 
             // update u
             if (u == m) {
-                u = pow(2, s+1)-1;
+                u = pow(2, l+1)-1;
             } else {
                 u--;
             }
         }
 
-        // copy temp into input
-        for (int i = 0; i < n; i++) {
-            input[i] = temp[i];
-        }
-
         // print level data
-        printf("\n%d; f%d:\t", rank, s+1);
-        for (int i = 0; i < n; i++){
-            printf("%.2f\t", input[i]);
+        printf("\n%d; f%d:\t", rank, l+1);
+        for (int i = 0; i < its; i++){
+            printf("%.2f\t", temp[i]);
         }
 
         // Gather the data from all processes
-        
-
+        // temp = (double*)realloc(temp, (its*2) * sizeof(double));
+        // for (int i = 0; i < rop; i++){
+        //     MPI_Send(temp, its*2, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
+        // }
 
         MPI_Barrier(MPI_COMM_WORLD);
+
+        // MPI_Recv(input, its*2, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
 
-    // for (int s = 0; s < logN; s++){
-    //     int m = pow(2, s);
-    //     int u = m;
-
-    //     // Parallelize this loop
-    //     for (int k = rank * (n / size); k < (rank + 1) * (n / size); k += 2 * m) {
-    //         for (int j = 0; j < m; j++){
-    //             if (k + j + m < n) {
-    //                 double t  = input[k + j];        // first element
-    //                 double u1 = input[k + j + m];    // second element
-    //                 double u2 = input[u + k];        // third element
-
-    //                 // butterfly operations
-    //                 temp[k + j] = t + (u1 * cosN(j, s+1)) + (u2 * sinN(j, s+1));
-    //                 temp[k + j + m] = t + (u1 * cosN(j+m, s+1)) + (u2 * sinN(j+m, s+1));
-
-    //                 // update u
-    //                 if (u == m) {
-    //                     u = pow(2, s+1)-1;
-    //                 } else {
-    //                     u--;
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     // copy temp into input
-    //     for (int i = 0; i < n; i++) {
-    //         input[i] = temp[i];
-    //     }
-
-    //     // print level data
-    //     printf("\n%d; f%d:\t", rank, s+1);
-    //     for (int i = 0; i < n; i++){
-    //         printf("%.2f\t", input[i]);
-    //     }
-
-    //     // Gather the data from all processes
-    //     // MPI_Allgather(MPI_IN_PLACE, n / size, MPI_DOUBLE, input, n / size, MPI_DOUBLE, MPI_COMM_WORLD);
-    // }
+    // copy temp into input
+    for (int i = 0; i < n; i++) {
+        input[i] = temp[i];
+    }
 
     free(temp);
 }
