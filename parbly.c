@@ -270,109 +270,153 @@ int aggregate_data(double *input, int p, int rank, int ebp){
     * @param input: input array
     * @param n: size of the input array
     * @param rank: rank of the current process
-    * @param size: total number of processes
+    * @param p: total number of processes
     * @return void
 */
-void eval_levels(double *input, int n, int rank, int size){
+void eval_levels(double *input, int n, int rank, int p){
     int its = pow(2, 1);  // items to send
-    int rop = n / (its*2);      // range of processes
     double *temp = (double*)malloc(its * sizeof(double));
+    double *temp_withnull = (double*)malloc(its * sizeof(double));
     int logN = (int)log2(n);
 
+    // copy the data
+    for (int i = 0; i < its; i++){
+        temp[i] = input[i];
+    }
+
     // iterate through all levels
-    for (int l = 1; l < logN; l++){
+    for (int l = 1; l <= logN; l++){
         int m = pow(2, l-1);
-        int u = m;
         int j = rank % m;
         its = pow(2, l);
-        rop = n / (its*2);
 
-        temp = (double*)realloc(temp, (its) * sizeof(double));
-        printf("\n%d; f%d -> its: %d  rop: %d", rank, l, its, rop);
-
-        if (j + m < n) {
-            double t  = input[j];        // first element
-            double u1 = input[j + m];    // second element
-            double u2 = input[u];        // third element
-
-            // butterfly operations
-            temp[j] = t + (u1 * cosN(j, l)) + (u2 * sinN(j, l));
-            temp[j + m] = t + (u1 * cosN(j+m, l)) + (u2 * sinN(j+m, l));
-
-            // update u
-            if (u == m) {
-                u = pow(2, l)-1;
-            } else {
-                u--;
-            }
+        // limit its to p to avoid overflow of ranks
+        if (its >= p){
+            its = p;
         }
+
+        // initialize memory for temp_withnull
+        for (int i = 0; i < its; i++) {
+            temp_withnull[i] = NAN;
+        }
+
+        // temp = (double*)realloc(temp, (its) * sizeof(double));
+        printf("\n%d; f%d -> its: %d", rank, l, its);
+
+        // print temp
+        printf("\n%d; temp:\t", rank);
+        for (int i = 0; i < its; i++){
+            printf("%.2f\t", temp[i]);
+        }
+
+        // update u
+        int mod_l = rank % m;
+        int u = 0;
+
+        if (!mod_l) {
+            u = m;
+            printf("\n%d; u = m = %d", rank, u);
+        } else {
+            u = (m * 2) - mod_l;
+            printf("\n%d; u = (m*2)-mod_l = (%d*2)-%d = %d", rank, m, mod_l, u);
+        }
+
+        // evaluate the butterfly operations
+        double t  = temp[j];        // first element
+        printf("\n%d; f%d -> t=temp[%d]=%f", rank, l, j, t);
+        double u1 = temp[j + m];    // second element
+        printf("\n%d; f%d -> u1=temp[%d]=%f", rank, l, j+m, u1);
+        double u2 = temp[u];        // third element
+        printf("\n%d; f%d -> u2=temp[%d]=%f", rank, l, u, u2);
+
+        // butterfly operations
+        temp_withnull[j] = t + (u1 * cosN(j, l)) + (u2 * sinN(j, l));
+        printf("\n%d; f%d -> temp_withnull[%d]=%f", rank, l, j, temp_withnull[j]);
+        temp_withnull[j + m] = t + (u1 * cosN(j+m, l)) + (u2 * sinN(j+m, l));
+        printf("\n%d; f%d -> temp_withnull[%d]=%f", rank, l, j+m, temp_withnull[j+m]);
+
 
         // print level data
         printf("\n%d; f%d:\t", rank, l);
         for (int i = 0; i < its; i++){
-            printf("%.2f\t", temp[i]);
+            printf("%.2f\t", temp_withnull[i]);
         }
 
         // Gather the data from all processes
-        int mod = rank % its;
+        int mod_ts = rank % its;
         double *temp_plus = (double*)malloc((its) * sizeof(double));
-        for (int i = mod; i > 0; i--){
-            int target_rank = rank-i;
-            if (target_rank >= 0) {
-                printf("\n%d; send to: %d -> %f,%f", rank, target_rank, temp[0], temp[1]);
-                MPI_Send(temp, its, MPI_DOUBLE, target_rank, 0, MPI_COMM_WORLD);
-            } else {
-                printf("\n+++++1++++++%d; send to: %d", rank, target_rank);
+
+        /*-------------*/
+
+        if (mod_ts) {
+            printf("\n%d; send to: %d -> ", rank, rank-mod_ts);
+            for (int i = 0; i < its; i++) {
+                printf("%.2f\t", temp_withnull[i]);
+            }
+            MPI_Send(temp_withnull, its, MPI_DOUBLE, rank-mod_ts, 0, MPI_COMM_WORLD);
+        }
+
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (!mod_ts) {
+            temp_withnull = (double*)realloc(temp_withnull, (its*2) * sizeof(double));
+
+            for (int i = rank+1; i < rank+its; i++) {
+                printf("\n%d; +++++its %d, mod_ts %d++++++recv from: %d", rank, its, mod_ts, i);
+                MPI_Recv(temp_plus, its, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+                // unisci tutto
+                if (l == 1){
+                    for (int i = its; i < its*2; i++){
+                        temp_withnull[i] = temp_plus[i-its];
+                        // printf("\n%d; temp_plus[%d]=%f", rank, i-its, temp_plus[i-its]);
+                    }
+                } else {
+                    for (int i = 0; i < its; i++){
+                        if (temp_plus[i] != NAN){
+                            temp_withnull[i] = temp_plus[i];
+                            // printf("\n%d; temp_plus[%d]=%f", rank, i, temp_plus[i]);
+                        }
+                    }
+                }
+            }
+
+            printf("\n%d; temp_withnull:\t", rank);
+            for (int i = 0; i < its*2; i++){
+                printf("%.2f\t", temp_withnull[i]);
+            }
+
+            // copy temp_withnull into temp
+            temp = (double*)realloc(temp, (its*2) * sizeof(double));
+            for (int i = 0; i < its*2; i++) {
+                temp[i] = temp_withnull[i];
+            }
+
+            if (l != logN) {
+                for (int i = rank+1; i < rank+its; i++) {
+                    printf("\n%d; send to: %d -> ", rank, i);
+                    for (int i = 0; i < its*2; i++) {
+                        printf("%.2f\t", temp[i]);
+                    }
+                    MPI_Send(temp, its*2, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
+                }
             }
         }
 
         MPI_Barrier(MPI_COMM_WORLD);
-        for (int i = 1; i < its-mod; i++){
-            int target_rank = rank + i;
-            if (target_rank < 4) {
-                MPI_Recv(temp_plus, its, MPI_DOUBLE, rank+i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            } else {
-                printf("\n+++++2++++++%d; send to: %d", rank, target_rank);
+        if (mod_ts && l != logN) {
+            printf("\n%d; +++++its %d, mod_ts %d++++++recv from: %d", rank, its, mod_ts, rank-mod_ts);
+            MPI_Recv(temp_plus, its*2, MPI_DOUBLE, rank-mod_ts, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+            printf("\n%d; temp_withnull:\t", rank);
+            for (int i = 0; i < its*2; i++){
+                printf("%.2f\t", temp_withnull[i]);
             }
-        }
 
-        printf("\n%d; temp_plus:\t", rank);
-        for (int i = 0; i < its; i++){
-            printf("%.2f\t", temp_plus[i]);
-        }
-
-        temp = (double*)realloc(temp, (its*2) * sizeof(double));
-        for (int i = its; i < its*2; i++){
-            temp[i] = temp_plus[i-its];
-        }
-
-        printf("\n%d; temp_plussed:\t", rank);
-        for (int i = 0; i < its*2; i++){
-            printf("%.2f\t", temp[i]);
-        }
-
-        for (int i = 1; i < its-mod; i++){
-            int target_rank = rank + i;
-            if (target_rank < 4) {
-                printf("\n%d; send to: %d -> %f,%f", rank, rank+i, temp[0], temp[1]);
-                MPI_Send(temp, its*2, MPI_DOUBLE, rank+i, 0, MPI_COMM_WORLD);
-            } else {
-                printf("\n+++++3++++++%d; send to: %d", rank, target_rank);
+            // copy temp_withnull into temp
+            temp = (double*)realloc(temp, (its*2) * sizeof(double));
+            for (int i = 0; i < its*2; i++) {
+                temp[i] = temp_plus[i];
             }
-        }
-
-        for (int i = mod; i > 0; i--){
-            int target_rank = rank-i;
-            if (target_rank >= 0) {
-                MPI_Recv(temp, its*2, MPI_DOUBLE, rank-i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            } else {
-                printf("\n+++++4++++++%d; send to: %d", rank, target_rank);
-            }
-        }
-
-        printf("\n%d; temp_plussed:\t", rank);
-        for (int i = 0; i < its*2; i++){
-            printf("%.2f\t", temp[i]);
         }
 
         free(temp_plus);
@@ -384,6 +428,7 @@ void eval_levels(double *input, int n, int rank, int size){
     }
 
     free(temp);
+    free(temp_withnull);
 }
 
 
