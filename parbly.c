@@ -289,11 +289,6 @@ void eval_levels(double *input, int n, int rank, int p){
         int u = 0;
         its = pow(2, l);
 
-        // limit its to p to avoid overflow of ranks
-        if (its >= p){
-            its = p;
-        }
-
         // temp = (double*)realloc(temp, (its) * sizeof(double));
         printf("\n%d; f%d -> its: %d", rank, l, its);
 
@@ -344,7 +339,9 @@ void eval_levels(double *input, int n, int rank, int p){
         double *temp_recv = (double*)malloc((its*2) * sizeof(double));
 
         if (!mod_ts){
-            for (int i = rank+1; i < rank+its && i < p; i++) {
+            int p_gap = (pow(2, l) < p) ? pow(2, l) : p;
+
+            for (int i = rank+1; i < rank+p_gap && i < p; i++) {
                 printf("\n%d; +++++its %d, mod_ts %d++++++recv1 from: %d", rank, its, mod_ts, i);
                 // print temp
                 printf("\n%d; pre recv temp:\t", rank);
@@ -385,7 +382,9 @@ void eval_levels(double *input, int n, int rank, int p){
             }
 
             if (l != logN) {
-                for (int i = rank+1; i < rank+its && i < p; i++) {
+                int p_gap = (pow(2, l) < p) ? pow(2, l) : p;
+
+                for (int i = rank+1; i < rank+p_gap && i < p; i++) {
                     printf("\n%d; send2 to: %d -> ", rank, i);
                     for (int i = 0; i < its*2; i++) {
                         printf("%.2f\t", temp[i]);
