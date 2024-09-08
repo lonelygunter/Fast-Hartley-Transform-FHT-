@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h> 
 #include <math.h>
 #include <mpi.h>
 
@@ -288,13 +289,25 @@ void eval_levels(double *input, int n, int rank, int p){
         int mod_l = rank % m;
         int u = 0;
         its = pow(2, l);
+        int temp_size = 0;
 
-        // temp = (double*)realloc(temp, (its) * sizeof(double));
+        if (l != logN){
+            temp_size = its*2;
+        } else {
+            temp_size = its;
+        }
+
+        temp = (double*)realloc(temp, (temp_size) * sizeof(double));
+        // initialize temp
+        for (int i = its; i < temp_size; i++) {
+            temp[i] = NAN;
+        }
+
         printf("\n%d; f%d -> its: %d", rank, l, its);
 
         // print temp
         printf("\n%d; temp:\t", rank);
-        for (int i = 0; i < its; i++){
+        for (int i = 0; i < temp_size; i++){
             printf("%.2f\t", temp[i]);
         }
 
@@ -336,7 +349,12 @@ void eval_levels(double *input, int n, int rank, int p){
 
         // Gather the data from all processes
         int mod_ts = rank % its;
-        double *temp_recv = (double*)malloc((its*2) * sizeof(double));
+        double *temp_recv = (double*)malloc((temp_size) * sizeof(double));
+
+        // initialize temp_recv
+        for (int i = 0; i < temp_size; i++) {
+            temp_recv[i] = NAN;
+        }
 
         if (!mod_ts){
             int p_gap = (pow(2, l) < p) ? pow(2, l) : p;
@@ -345,39 +363,43 @@ void eval_levels(double *input, int n, int rank, int p){
                 printf("\n%d; +++++its %d, mod_ts %d++++++recv1 from: %d", rank, its, mod_ts, i);
                 // print temp
                 printf("\n%d; pre recv temp:\t", rank);
-                for (int j = 0; j < its*2; j++){
+                for (int j = 0; j < temp_size; j++){
                     printf("%.2f\t", temp[j]);
                 }
                 printf("\n");
 
-                MPI_Recv(temp_recv, its*2, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                MPI_Recv(temp_recv, temp_size, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
                 // print temp_recv
                 printf("\n%d; post temp_recv:\t", rank);
-                for (int j = 0; j < its*2; j++){
-                    if (temp_recv[j] != NAN){
-                        printf("%.2f\t", temp_recv[j]);
-                    } else {
-                        printf("NAN\t");
-                    }
+                for (int j = 0; j < temp_size; j++){
+                    printf("%.2f\t", temp_recv[j]);
                 }
 
                 // unisci tutto
                 if (l == 1){
-                    for (int i = its; i < its*2; i++){
+                    for (int i = its; i < temp_size; i++){
                         temp[i] = temp_recv[i-its];
                     }
                 } else {
+                    int its_gap = its;
                     for (int i = 0; i < its; i++){
-                        if (temp_recv[i] != NAN){
-                            temp[i] = temp_recv[i];
+                        if (isnan(temp[i])){
+                            its_gap = 0;
+                            break;
+                        }
+                    }
+
+                    for (int i = 0+its_gap; i < its+its_gap; i++){
+                        if (!isnan(temp_recv[i-its_gap])){
+                            temp[i] = temp_recv[i-its_gap];
                         }
                     }
                 }
             }
 
             printf("\n%d; temp1:\t", rank);
-            for (int i = 0; i < its*2; i++){
+            for (int i = 0; i < temp_size; i++){
                 printf("%.2f\t", temp[i]);
             }
 
@@ -386,31 +408,31 @@ void eval_levels(double *input, int n, int rank, int p){
 
                 for (int i = rank+1; i < rank+p_gap && i < p; i++) {
                     printf("\n%d; send2 to: %d -> ", rank, i);
-                    for (int i = 0; i < its*2; i++) {
+                    for (int i = 0; i < temp_size; i++) {
                         printf("%.2f\t", temp[i]);
                     }
 
-                    MPI_Send(temp, its*2, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
+                    MPI_Send(temp, temp_size, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
                 }
             }
         } else {
             printf("\n%d; send1 to: %d -> ", rank, rank-mod_ts);
-            for (int i = 0; i < its*2; i++) {
+            for (int i = 0; i < temp_size; i++) {
                 printf("%.2f\t", temp[i]);
             }
-            MPI_Send(temp, its*2, MPI_DOUBLE, rank-mod_ts, 0, MPI_COMM_WORLD);
+            MPI_Send(temp, temp_size, MPI_DOUBLE, rank-mod_ts, 0, MPI_COMM_WORLD);
 
             if (l != logN) {
                 printf("\n%d; temp3:\t", rank);
-                for (int i = 0; i < its*2; i++){
+                for (int i = 0; i < temp_size; i++){
                     printf("%.2f\t", temp[i]);
                 }
 
                 printf("\n%d; +++++its %d, mod_ts %d++++++recv2 from: %d", rank, its, mod_ts, rank-mod_ts);
-                MPI_Recv(temp, its*2, MPI_DOUBLE, rank-mod_ts, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                MPI_Recv(temp, temp_size, MPI_DOUBLE, rank-mod_ts, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
                 printf("\n%d; temp2:\t", rank);
-                for (int i = 0; i < its*2; i++){
+                for (int i = 0; i < temp_size; i++){
                     printf("%.2f\t", temp[i]);
                 }
             }
