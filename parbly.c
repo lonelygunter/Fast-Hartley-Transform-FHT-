@@ -10,7 +10,7 @@
 int take_input(FILE *inputfp, char *filename, int *n, double **input);
 void transform_array(double *input, int n);
 int eval_ebp(int n, int p, int level);
-int aggregate_data(double *input, int p, int rank, int ebp);
+int aggregate_data(double *input, int n, int p, int rank, int ebp);
 void eval_levels(double *input, int n, int rank, int p);
 double cosN(int n, int l);
 double sinN(int n, int l);
@@ -78,16 +78,18 @@ int main(int argc, char **argv) {
     int ebp = 0;
     ebp = eval_ebp(n, p, 1);
 
+    printf("\n%d; ------------------ ebp: %d", rank, ebp);
+
     if (!rank) {
         // create level 0: f_0 (tau)
         transform_array(input, n);
 
         if (ebp == 1){
-            // TODO
+            ebp = 2;
         }
 
         // Aggregate the data
-        if (aggregate_data(input, p, rank, ebp)){
+        if (aggregate_data(input, n, p, rank, ebp)){
             MPI_Abort(MPI_COMM_WORLD, 1);
             return 1;
         }
@@ -241,21 +243,31 @@ int eval_ebp(int n, int p, int level){
 
 /** Function to aggregate the data
     * @param input: input array
+    * @param n: size of the input array
     * @param p: number of processes
     * @param ebp: element by process
     * @return 0 if the data is aggregated successfully, 1 otherwise
 */
-int aggregate_data(double *input, int p, int rank, int ebp){
-    double *couple_input = (double*)malloc(ebp * sizeof(double));
+int aggregate_data(double *input, int n, int p, int rank, int ebp){
+    double **couple_input = (double* *)malloc(n/2 * sizeof(double));
 
     for (int i = 1; i < p; i++){
-        for (int j = 0; j < ebp; j++){
-            couple_input[j] = input[(ebp*i)+j];
-        }
-        // printf("\n%d; MPI_Send: %f,%f to %d", rank, couple_input[0], couple_input[1], i);
+        couple_input[i-1] = (double*)malloc(ebp * sizeof(double));
 
-        MPI_Send(couple_input, ebp, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
+        for (int j = 0; j < ebp; j++){
+            couple_input[i-1][j] = input[(ebp*i)+j];
+        }
+
+        printf("\n%d; MPI_Send to %d: ", rank, i);
+        for (int j = 0; j < ebp; j++){
+            printf("%.2f\t", couple_input[i-1][j]);
+        }
+        printf("\n");
+
+        MPI_Send(couple_input[i-1], ebp, MPI_DOUBLE, i, 0, MPI_COMM_WORLD);
     }
+
+    free(couple_input);
 
     return 0;
 }
