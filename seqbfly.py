@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import sys
 
 def cosN(n, l):
     return math.cos((2 * math.pi * n) / (2 ** l))
@@ -24,10 +25,22 @@ def transform_array(data):
     
     return temp
 
-data = [1, 2, 3, 4, 5, 6, 7, 8]
+# Check if the number of command-line arguments is correct
+if len(sys.argv) != 2:
+    print("Usage: python script.py <number>")
+
+
+# Take the number from the command line and convert it to an integer
+N = int(sys.argv[1])
+
+# Create a list of that length with default values (e.g., 0)
+data = [0] * N
+
+for i in range(N):
+    data[i] = i+1
+
 print(f"Data: \t{np.round(data, 2)}")
 
-N = len(data)
 logN = int(math.log2(N))
 
 
